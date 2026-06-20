@@ -1,0 +1,48 @@
+name: Check Post Views
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: check-post-views
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure git identity
+        run: |
+          git config user.name "ig-auto-poster-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Check views and notify on milestone
+        run: python3 scripts/check_views.py
+
+      - name: Save updated state
+        run: |
+          git add state.json
+          git commit -m "chore: views milestone check" || echo "nothing to commit"
+          git pull --rebase
+          git push
