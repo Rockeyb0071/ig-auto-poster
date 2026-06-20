@@ -1,0 +1,60 @@
+name: Daily Instagram Post
+
+on:
+  schedule:
+    # 7:00 AM IST = 1:30 AM UTC, every day
+    - cron: "30 1 * * *"
+  workflow_dispatch: {}   # lets you trigger it manually from the Actions tab to test
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-instagram-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    env:
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GITHUB_BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure git identity
+        run: |
+          git config user.name "ig-auto-poster-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+      - name: Generate today's image
+        run: python3 scripts/generate_post.py
+
+      - name: Push image so it has a public URL (Instagram must be able to fetch it)
+        run: |
+          git add posts/ state.json
+          git commit -m "chore: today's generated post image" || echo "nothing to commit"
+          git pull --rebase
+          git push
+
+      - name: Publish to Instagram + notify Telegram
+        run: python3 scripts/run_daily.py
+
+      - name: Save post record
+        run: |
+          git add state.json
+          git commit -m "chore: record published post" || echo "nothing to commit"
+          git pull --rebase
+          git push
